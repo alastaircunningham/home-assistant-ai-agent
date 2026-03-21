@@ -1,0 +1,27 @@
+name: "AI Agent"
+version: "0.1.0"
+slug: "ha-ai-agent"
+description: "Chat-based Home Assistant management powered by Claude AI"
+arch:
+  - amd64
+  - aarch64
+ingress: true
+ingress_port: 8099
+ingress_entry: /
+panel_icon: "mdi:robot"
+panel_title: "AI Agent"
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+auth_api: true
+map:
+  - homeassistant_config:rw
+options:
+  anthropic_api_key: ""
+  model: "claude-sonnet-4-5-20250514"
+  log_level: "info"
+schema:
+  anthropic_api_key: str
+  model: str?
+  log_level: "list(debug|info|warn|error)?"

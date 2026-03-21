@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output
+server/dist/
+
+# Environment / secrets
+.env
+.env.local
+data/
+/tmp/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
