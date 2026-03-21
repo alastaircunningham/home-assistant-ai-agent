@@ -50,7 +50,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/settings', settingsRouter);
-app.use('/api/confirmations', confirmationsRouter);
+app.use('/api/confirmation-policies', confirmationsRouter);
 app.use('/api/config-files', configFilesRouter);
 app.use('/api/ingress', ingressRouter());
 

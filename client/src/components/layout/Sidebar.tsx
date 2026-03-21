@@ -25,7 +25,7 @@ export default function Sidebar({
       {/* New Chat button */}
       <div className="p-3">
         <button
-          onClick={onCreate}
+          onClick={() => onCreate()}
           className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
