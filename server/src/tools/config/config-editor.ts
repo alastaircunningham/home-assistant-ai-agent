@@ -4,18 +4,18 @@ import { registerTool } from '../registry.js';
 import { ConfigEditor } from '../../services/config-editor.js';
 
 const inputSchema = z.object({
-  action: z.enum(['read', 'write', 'list']).describe('Action to perform on config files'),
+  action: z.enum(['read', 'write', 'list']).describe('Action: "list" lists available files, "read" reads a file, "write" writes a file'),
   file_path: z
     .string()
     .optional()
-    .describe('Relative file path within HA config directory (for read/write)'),
-  content: z.string().optional().describe('File content to write (for write action)'),
+    .describe('Relative file path within HA config directory. Required for read and write actions.'),
+  content: z.string().optional().describe('REQUIRED for write action: the complete new file content to write. Must be valid YAML. Must not be omitted or empty when action is "write".'),
 });
 
 const configEditorTool: ToolDefinition = {
   name: 'config_editor',
   description:
-    'Read, write, or list Home Assistant configuration files (YAML). Always requires confirmation. Use list to see available files, read to view a file, write to modify.',
+    'Read, write, or list Home Assistant YAML configuration files. Always requires user confirmation before writing. IMPORTANT: For action="write" you MUST include both file_path AND content (the full file content as a string). Never call write without content.',
   inputSchema,
   category: 'config',
   confirmationDefault: 'always_confirm',
