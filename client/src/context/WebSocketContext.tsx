@@ -12,13 +12,13 @@ import type { WSMessage } from '../lib/types';
 
 interface WebSocketContextValue {
   send: (message: WSMessage) => void;
-  lastMessage: WSMessage | null;
+  subscribe: (handler: (msg: WSMessage) => void) => () => void;
   isConnected: boolean;
 }
 
 const WebSocketContext = createContext<WebSocketContextValue>({
   send: () => {},
-  lastMessage: null,
+  subscribe: () => () => {},
   isConnected: false,
 });
 
@@ -29,10 +29,17 @@ export function useWebSocket() {
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { basePath, ready } = useIngress();
   const [isConnected, setIsConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const retriesRef = useRef(0);
+  const handlersRef = useRef<Set<(msg: WSMessage) => void>>(new Set());
+
+  const subscribe = useCallback((handler: (msg: WSMessage) => void) => {
+    handlersRef.current.add(handler);
+    return () => {
+      handlersRef.current.delete(handler);
+    };
+  }, []);
 
   const connect = useCallback(() => {
     if (!ready) return;
@@ -51,7 +58,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as WSMessage;
-        setLastMessage(data);
+        handlersRef.current.forEach((h) => h(data));
       } catch {
         // ignore non-JSON messages
       }
@@ -85,7 +92,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <WebSocketContext.Provider value={{ send, lastMessage, isConnected }}>
+    <WebSocketContext.Provider value={{ send, subscribe, isConnected }}>
       {children}
     </WebSocketContext.Provider>
   );

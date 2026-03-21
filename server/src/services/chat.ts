@@ -3,7 +3,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../logger.js';
 import { addMessage, getMessages, getNextSeq, type Message } from '../db/messages.repo.js';
 import { getToolsForClaude } from '../tools/index.js';
-import { streamChat, type ClaudeMessage, type ClaudeContentBlock } from './claude.js';
+import {
+  streamChat,
+  truncateMessages,
+  estimateInputTokens,
+  CONTEXT_WARN_THRESHOLD,
+  type ClaudeMessage,
+  type ClaudeContentBlock,
+} from './claude.js';
 import { executeTool, checkConfirmation } from './tool-executor.js';
 import type { ToolContext } from '../tools/types.js';
 
@@ -22,8 +29,6 @@ export interface PendingConfirmation {
   toolUseId: string;
   toolName: string;
   toolInput: any;
-  messages: ClaudeMessage[];
-  assistantMessageId: string;
 }
 
 // In-memory store for pending confirmations
@@ -65,10 +70,30 @@ function dbMessagesToClaudeMessages(dbMessages: Message[]): ClaudeMessage[] {
       claudeMessages.push({ role: 'user', content: msg.content ?? '' });
       i++;
     } else if (msg.role === 'assistant') {
-      claudeMessages.push({ role: 'assistant', content: msg.content ?? '' });
+      // Collect optional text block then any immediately following tool_use blocks.
+      // Both are part of the same assistant turn and must be in a single message.
+      const blocks: ClaudeContentBlock[] = [];
+      if (msg.content) {
+        blocks.push({ type: 'text', text: msg.content });
+      }
       i++;
+      while (i < dbMessages.length && dbMessages[i]!.role === 'tool_use') {
+        const tu = dbMessages[i]!;
+        blocks.push({
+          type: 'tool_use',
+          id: tu.id,
+          name: tu.tool_name!,
+          input: safeJsonParse(tu.tool_input),
+        });
+        i++;
+      }
+      if (blocks.length === 1 && blocks[0]!.type === 'text') {
+        claudeMessages.push({ role: 'assistant', content: msg.content ?? '' });
+      } else if (blocks.length > 0) {
+        claudeMessages.push({ role: 'assistant', content: blocks });
+      }
     } else if (msg.role === 'tool_use') {
-      // Collect consecutive tool_use blocks as an assistant message
+      // Tool-use-only response (no preceding assistant text message)
       const blocks: ClaudeContentBlock[] = [];
       while (i < dbMessages.length && dbMessages[i]!.role === 'tool_use') {
         const tu = dbMessages[i]!;
@@ -155,8 +180,23 @@ async function runConversationLoop(
     let fullText = '';
     const toolUses: Array<{ id: string; name: string; input: any }> = [];
 
+    // Truncate history to fit within context window
+    const { messages: messagesForApi, wasTruncated } = truncateMessages(currentMessages);
+    if (wasTruncated) {
+      logger.info('Conversation history truncated to fit context window', { conversationId });
+      wsBroadcast('context_truncated', { conversation_id: conversationId });
+    } else {
+      const estimatedTokens = estimateInputTokens(currentMessages);
+      if (estimatedTokens > CONTEXT_WARN_THRESHOLD) {
+        wsBroadcast('context_warning', {
+          conversation_id: conversationId,
+          estimated_tokens: estimatedTokens,
+        });
+      }
+    }
+
     // Stream from Claude
-    const response = await streamChat(currentMessages, tools, {
+    const response = await streamChat(messagesForApi, tools, {
       onText: (text) => {
         fullText += text;
         wsBroadcast('message_delta', { conversation_id: conversationId, content: text });
@@ -298,8 +338,6 @@ async function runConversationLoop(
             toolUseId: tu.id,
             toolName: tu.name,
             toolInput: tu.input,
-            messages: currentMessages,
-            assistantMessageId: tu.id,
           });
 
           wsBroadcast('confirmation_required', {
@@ -344,7 +382,7 @@ export async function resumeAfterConfirmation(
 
   pendingConfirmations.delete(confirmationId);
 
-  const { conversationId, toolUseId, toolName, toolInput, messages } = pending;
+  const { conversationId, toolUseId, toolName, toolInput } = pending;
   let resultStr: string;
 
   if (approved) {
@@ -387,20 +425,10 @@ export async function resumeAfterConfirmation(
     seq: trSeq,
   });
 
-  // Build messages with the tool result and continue the loop
-  const updatedMessages: ClaudeMessage[] = [
-    ...messages,
-    {
-      role: 'user',
-      content: [
-        {
-          type: 'tool_result' as const,
-          tool_use_id: toolUseId,
-          content: resultStr,
-        },
-      ],
-    },
-  ];
+  // Reload the full conversation from DB (tool_result was just saved above),
+  // then build the Claude-format messages from the current DB state.
+  const dbMessages = getMessages(conversationId);
+  const updatedMessages = dbMessagesToClaudeMessages(dbMessages);
 
   const tools = getToolsForClaude();
 

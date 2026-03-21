@@ -13,6 +13,7 @@ interface ChatLayoutProps {
   streamingContent: string;
   isStreaming: boolean;
   confirmationRequest: ConfirmationRequest | null;
+  contextWarning: 'warning' | 'truncated' | null;
   conversationsLoading: boolean;
   messagesLoading: boolean;
   onSelectConversation: (id: string) => void;
@@ -32,6 +33,7 @@ export default function ChatLayout({
   streamingContent,
   isStreaming,
   confirmationRequest,
+  contextWarning,
   conversationsLoading,
   messagesLoading,
   onSelectConversation,
@@ -93,6 +95,14 @@ export default function ChatLayout({
             confirmationRequest={confirmationRequest}
             onRespondToConfirmation={onRespondToConfirmation}
           />
+
+          {contextWarning && (
+            <div className="px-4 py-2 text-xs text-amber-800 bg-amber-50 border-t border-amber-200">
+              {contextWarning === 'truncated'
+                ? 'Earlier messages were omitted to fit within the context window. Start a new chat to reset.'
+                : 'This conversation is getting long. Consider starting a new chat to avoid hitting the context limit.'}
+            </div>
+          )}
 
           <ChatInput
             onSend={onSendMessage}

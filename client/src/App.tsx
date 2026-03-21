@@ -25,6 +25,7 @@ function AppInner() {
     streamingContent,
     isStreaming,
     confirmationRequest,
+    contextWarning,
     sendMessage,
     respondToConfirmation,
   } = useChat(activeConversationId);
@@ -49,6 +50,7 @@ function AppInner() {
         streamingContent={streamingContent}
         isStreaming={isStreaming}
         confirmationRequest={confirmationRequest}
+        contextWarning={contextWarning}
         conversationsLoading={conversationsLoading}
         messagesLoading={messagesLoading}
         onSelectConversation={selectConversation}

@@ -9,7 +9,8 @@ export function useChat(activeConversationId: string | null) {
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [confirmationRequest, setConfirmationRequest] = useState<ConfirmationRequest | null>(null);
-  const { lastMessage, send } = useWebSocket();
+  const [contextWarning, setContextWarning] = useState<'warning' | 'truncated' | null>(null);
+  const { subscribe, send } = useWebSocket();
   const activeIdRef = useRef(activeConversationId);
 
   useEffect(() => {
@@ -35,65 +36,68 @@ export function useChat(activeConversationId: string | null) {
   useEffect(() => {
     if (activeConversationId) {
       loadMessages(activeConversationId);
+      setContextWarning(null);
     } else {
       setMessages([]);
       setStreamingContent('');
       setIsStreaming(false);
       setConfirmationRequest(null);
+      setContextWarning(null);
     }
   }, [activeConversationId, loadMessages]);
 
-  // Handle WebSocket messages
+  // Handle WebSocket messages via direct subscription to avoid React batching dropping deltas
   useEffect(() => {
-    if (!lastMessage) return;
+    return subscribe((msg) => {
+      const { type } = msg;
 
-    const { type } = lastMessage;
-
-    if (lastMessage.conversation_id && lastMessage.conversation_id !== activeIdRef.current) {
-      return;
-    }
-
-    switch (type) {
-      case 'message_delta': {
-        setIsStreaming(true);
-        setStreamingContent((prev) => prev + (lastMessage.content as string || ''));
-        break;
+      if (msg.conversation_id && msg.conversation_id !== activeIdRef.current) {
+        return;
       }
-      case 'message_complete': {
-        setIsStreaming(false);
-        setStreamingContent('');
-        // Reload messages from server to get the persisted version
-        if (activeIdRef.current) {
-          loadMessages(activeIdRef.current);
+
+      switch (type) {
+        case 'message_delta': {
+          setIsStreaming(true);
+          setStreamingContent((prev) => prev + (msg.content as string || ''));
+          break;
         }
-        break;
+        case 'message_complete': {
+          setIsStreaming(false);
+          setStreamingContent('');
+          if (activeIdRef.current) {
+            loadMessages(activeIdRef.current);
+          }
+          break;
+        }
+        case 'confirmation_required': {
+          setConfirmationRequest({
+            id: msg.id as string,
+            tool_name: msg.tool_name as string,
+            tool_input: msg.tool_input,
+            description: msg.description as string,
+            timeout_seconds: (msg.timeout_seconds as number) || 30,
+          });
+          break;
+        }
+        case 'context_truncated': {
+          setContextWarning('truncated');
+          break;
+        }
+        case 'context_warning': {
+          if (!contextWarning) {
+            setContextWarning('warning');
+          }
+          break;
+        }
+        case 'error': {
+          console.error('WebSocket error:', msg.error);
+          setIsStreaming(false);
+          setStreamingContent('');
+          break;
+        }
       }
-      case 'tool_executing': {
-        // No-op: message_complete will reload all messages
-        break;
-      }
-      case 'tool_result': {
-        // No-op: message_complete will reload all messages
-        break;
-      }
-      case 'confirmation_required': {
-        setConfirmationRequest({
-          id: lastMessage.id as string,
-          tool_name: lastMessage.tool_name as string,
-          tool_input: lastMessage.tool_input,
-          description: lastMessage.description as string,
-          timeout_seconds: (lastMessage.timeout_seconds as number) || 30,
-        });
-        break;
-      }
-      case 'error': {
-        console.error('WebSocket error:', lastMessage.error);
-        setIsStreaming(false);
-        setStreamingContent('');
-        break;
-      }
-    }
-  }, [lastMessage]);
+    });
+  }, [subscribe, loadMessages]);
 
   const sendMessageToConversation = useCallback(
     async (content: string) => {
@@ -139,6 +143,7 @@ export function useChat(activeConversationId: string | null) {
     streamingContent,
     isStreaming,
     confirmationRequest,
+    contextWarning,
     loadMessages,
     sendMessage: sendMessageToConversation,
     respondToConfirmation,

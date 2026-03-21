@@ -110,6 +110,98 @@ function getDefaultSystemPrompt(): string {
 - Keep confirmation explanations to one sentence`;
 }
 
+// All current Claude models have a 200k token context window.
+const MODEL_CONTEXT_WINDOW = 200_000;
+const MAX_RESPONSE_TOKENS = 4_096;
+// Reserve 80% of the window for input, minus the response budget.
+const CONTEXT_BUDGET = Math.floor(MODEL_CONTEXT_WINDOW * 0.8) - MAX_RESPONSE_TOKENS;
+// Warn when input tokens exceed 60% of the budget (before truncation kicks in).
+export const CONTEXT_WARN_THRESHOLD = Math.floor(CONTEXT_BUDGET * 0.6);
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+function estimateMessageTokens(messages: ClaudeMessage[]): number {
+  let total = 0;
+  for (const msg of messages) {
+    total += 4; // per-message overhead
+    if (typeof msg.content === 'string') {
+      total += estimateTokens(msg.content);
+    } else {
+      for (const block of msg.content) {
+        if (block.type === 'text') {
+          total += estimateTokens(block.text);
+        } else if (block.type === 'tool_use') {
+          total += estimateTokens(block.name) + estimateTokens(JSON.stringify(block.input));
+        } else if (block.type === 'tool_result') {
+          total += estimateTokens(block.content);
+        }
+      }
+    }
+  }
+  return total;
+}
+
+const TRUNCATION_NOTE =
+  '[Note: Earlier messages in this conversation were omitted to fit within the context window.]';
+
+export function estimateInputTokens(messages: ClaudeMessage[]): number {
+  return estimateTokens(buildSystemPrompt()) + estimateMessageTokens(messages);
+}
+
+/**
+ * Truncate messages to fit within the context budget using a sliding window.
+ * Always keeps the most recent messages; prepends a note if any were dropped.
+ */
+export function truncateMessages(messages: ClaudeMessage[]): {
+  messages: ClaudeMessage[];
+  wasTruncated: boolean;
+} {
+  const systemTokens = estimateTokens(buildSystemPrompt());
+  const availableTokens = CONTEXT_BUDGET - systemTokens;
+
+  if (estimateMessageTokens(messages) <= availableTokens) {
+    return { messages, wasTruncated: false };
+  }
+
+  // Reserve space for the truncation note we'll prepend
+  const noteTokens = estimateTokens(TRUNCATION_NOTE) + 4;
+  const budgetForMessages = availableTokens - noteTokens;
+
+  // Build from newest to oldest until we hit the budget
+  const kept: ClaudeMessage[] = [];
+  let tokensUsed = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msgTokens = estimateMessageTokens([messages[i]!]);
+    if (tokensUsed + msgTokens > budgetForMessages) break;
+    kept.unshift(messages[i]!);
+    tokensUsed += msgTokens;
+  }
+
+  // Claude API requires conversations to start with a user message
+  while (kept.length > 0 && kept[0]!.role !== 'user') {
+    kept.shift();
+  }
+
+  // Fallback: always keep at least the last user message
+  if (kept.length === 0) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.role === 'user') {
+        kept.push(messages[i]!);
+        break;
+      }
+    }
+  }
+
+  // Prepend truncation note to the first kept user message
+  if (kept.length > 0 && typeof kept[0]!.content === 'string') {
+    kept[0] = { ...kept[0]!, content: TRUNCATION_NOTE + '\n\n' + kept[0]!.content };
+  }
+
+  return { messages: kept, wasTruncated: true };
+}
+
 /**
  * Send a message to Claude with streaming and tool use support.
  * Returns the final complete response message.

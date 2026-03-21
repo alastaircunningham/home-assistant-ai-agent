@@ -128,6 +128,28 @@ confirmation_policies (tool_name, policy)
 
 The API key is stored AES-256-GCM encrypted. The encryption key lives at `/data/.encryption_key` (generated on first run).
 
+## TODO
+
+- [x] **Context window management for long chats** — Currently the full conversation history is sent to the Claude API on every turn with no truncation or token counting. Long chats will eventually exceed the model's context window (400 error) and cost escalates with every turn. Implement:
+  1. Token estimation before calling `streamChat` (heuristic ~4 chars/token or a proper tokenizer)
+  2. A token budget (e.g. 80% of model context window minus `max_tokens` response budget)
+  3. Sliding-window truncation: drop oldest message pairs when over budget, always keeping the first user message and all recent messages within budget
+  4. Optionally prepend a note when messages are trimmed ("Earlier messages were trimmed for length")
+  5. UX-level safeguard: warn the user when a conversation is getting long and suggest starting a new chat
+  6. Fix `PendingConfirmation` to store only metadata and re-fetch messages from DB when resuming, rather than holding the full message array in memory
+
+- [x] **Fix dropped streaming deltas (garbled chat text)** — `WebSocketContext` stores a single `lastMessage` state value that gets overwritten when React batches rapid `setLastMessage` calls during streaming. Intermediate `message_delta` chunks are silently lost, causing dropped characters and garbled text. Fix by replacing the single-value `lastMessage` pattern with a message queue (ref-backed array processed each render) or by accumulating streaming content directly in the `onmessage` handler via a ref, bypassing React state batching for high-frequency deltas.
+
+- [ ] **Add database indexes on messages table** — `messages` table has no index on `conversation_id`. Every `getMessages()` call and `getNextSeq()` `MAX(seq)` query is a full table scan. Add `CREATE INDEX IF NOT EXISTS idx_messages_conversation_seq ON messages(conversation_id, seq)` via a migration in `server/src/db/database.ts`.
+
+- [ ] **Add timeout on Claude API calls** — `streamChat` in `claude.ts` awaits `stream.finalMessage()` with no timeout. If the Anthropic API hangs, the conversation loop blocks indefinitely. Wrap with `Promise.race()` and a reasonable timeout (e.g. 120s), and propagate a clear error to the client.
+
+- [ ] **Fix race condition in `getNextSeq()`** — `messages.repo.ts` reads `MAX(seq)` and returns `+1` in two separate steps. Concurrent calls can read the same max and produce duplicate sequence numbers, corrupting message order. Make this atomic using a transaction or `INSERT...RETURNING`.
+
+- [ ] **Fix stale messages in `resumeAfterConfirmation`** — `PendingConfirmation` captures the full messages array at confirmation time. If the conversation progresses before the user responds, the resumed loop uses stale context. Re-fetch messages from the DB instead of using the captured array.
+
+- [ ] **Handle confirmation timeout expiry on client** — When the 30s confirmation timeout fires, the entry is deleted from the `pendingConfirmations` map but the client is never notified. If the user then approves, `resumeAfterConfirmation` silently no-ops. Broadcast a `confirmation_expired` event to the client so the UI can clear the prompt and show a message.
+
 ## Common gotchas
 
 - All server imports must use `.js` extensions (ESM + NodeNext module resolution).
