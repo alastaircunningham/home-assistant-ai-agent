@@ -41,7 +41,7 @@ Or if you have SSH access to HA and git installed:
 ```bash
 ssh root@homeassistant.local
 cd /addons
-git clone https://github.com/yourname/home-assistant-ai-agent ha-ai-agent
+git clone https://github.com/alastaircunningham/home-assistant-ai-agent ha-ai-agent
 ```
 
 **2. Build the Docker image on your dev machine (optional — faster than building on HA hardware)**
@@ -82,10 +82,9 @@ Click **Start**. The add-on will appear as **AI Agent** in your HA sidebar.
 
 To install from a custom repository URL (allows one-click installs for other users):
 
-1. Fork / push this repo to GitHub
-2. In HA, go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
-3. Add your GitHub repo URL (e.g. `https://github.com/yourname/home-assistant-ai-agent`)
-4. The add-on will appear in the store
+1. In HA, go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
+2. Add: `https://github.com/alastaircunningham/home-assistant-ai-agent`
+3. The add-on will appear in the store
 
 ---
 
