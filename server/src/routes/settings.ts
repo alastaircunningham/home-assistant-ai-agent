@@ -1,12 +1,17 @@
 import { Router, type Request, type Response } from 'express';
 import { getAllSettings, setSetting } from '../db/settings.repo.js';
+import { buildSystemPrompt } from '../services/claude.js';
 import { logger } from '../logger.js';
 
 const router = Router();
 
-// GET / — get all settings
+// GET / — get all settings (includes defaults for keys not yet set)
 router.get('/', (_req: Request, res: Response) => {
   const settings = getAllSettings();
+  // Return the effective system prompt (DB override or hardcoded default)
+  if (!settings['system_prompt']) {
+    settings['system_prompt'] = buildSystemPrompt();
+  }
   res.json(settings);
 });
 

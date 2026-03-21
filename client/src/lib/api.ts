@@ -56,7 +56,7 @@ export function updateConversationTitle(id: string, title: string): Promise<Conv
 }
 
 export function sendMessage(conversationId: string, content: string): Promise<void> {
-  return api.post<void>(`/api/conversations/${conversationId}/messages`, { content });
+  return api.post<void>(`/api/chat/${conversationId}/messages`, { content });
 }
 
 export function fetchSettings(): Promise<Settings> {

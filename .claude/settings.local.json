@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:developers.home-assistant.io)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:www.home-assistant.io)",
+      "WebFetch(domain:blog.michal.pawlik.dev)",
+      "WebFetch(domain:afterhourscoding.wordpress.com)",
+      "Bash(npm install:*)",
+      "Bash(cd:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

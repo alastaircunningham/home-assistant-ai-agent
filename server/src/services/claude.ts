@@ -47,8 +47,15 @@ export function getModel(): string {
 
 /**
  * Build the system prompt for the Home Assistant AI agent.
+ * Uses a DB override if one has been saved, otherwise returns the hardcoded default.
  */
 export function buildSystemPrompt(): string {
+  const override = getSetting('system_prompt');
+  if (override) return override;
+  return getDefaultSystemPrompt();
+}
+
+function getDefaultSystemPrompt(): string {
   return `You are an AI agent embedded directly in Home Assistant as a sidebar add-on. You have live API access to the user's Home Assistant instance and can control devices, query state, manage automations, and edit configuration files.
 
 ## Your capabilities

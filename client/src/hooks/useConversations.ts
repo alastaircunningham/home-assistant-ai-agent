@@ -57,10 +57,21 @@ export function useConversations() {
     async (id: string) => {
       try {
         await apiDeleteConversation(id);
-        setConversations((prev) => prev.filter((c) => c.id !== id));
-        if (activeConversationId === id) {
-          setActiveConversationId(null);
-        }
+        setConversations((prev) => {
+          const remaining = prev.filter((c) => c.id !== id);
+          if (activeConversationId === id) {
+            if (remaining.length > 0) {
+              setActiveConversationId(remaining[0]!.id);
+            } else {
+              // Auto-create a new conversation so the input stays usable
+              apiCreateConversation('New conversation').then((conv) => {
+                setConversations([conv]);
+                setActiveConversationId(conv.id);
+              }).catch(console.error);
+            }
+          }
+          return remaining;
+        });
       } catch (err) {
         console.error('Failed to delete conversation:', err);
       }
