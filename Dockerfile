@@ -10,12 +10,12 @@ WORKDIR /build
 COPY server/package.json server/package-lock.json* server/
 RUN cd server && npm install
 
-# Prune dev dependencies in-place so we can copy node_modules to runtime stage
-RUN cd server && npm prune --omit=dev
-
-# Build server TypeScript
+# Build server TypeScript (needs dev deps like tsc)
 COPY server/ server/
 RUN cd server && npm run build
+
+# Prune dev dependencies after build so we can copy a lean node_modules to runtime stage
+RUN cd server && npm prune --omit=dev
 
 # Build client
 COPY client/package.json client/package-lock.json* client/
