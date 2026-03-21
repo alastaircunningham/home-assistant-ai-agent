@@ -1,12 +1,19 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
+# Native build tools needed for better-sqlite3
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /build
 
-# Build server
+# Install server deps (compiles better-sqlite3 native addon here, with network access)
 COPY server/package.json server/package-lock.json* server/
 RUN cd server && npm install
 
+# Prune dev dependencies in-place so we can copy node_modules to runtime stage
+RUN cd server && npm prune --omit=dev
+
+# Build server TypeScript
 COPY server/ server/
 RUN cd server && npm run build
 
@@ -20,16 +27,12 @@ RUN cd client && npm run build
 # Stage 2: Runtime
 FROM node:22-alpine
 
-# Install native dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
-
 WORKDIR /app/server
 
-# Install production dependencies only
-COPY server/package.json server/package-lock.json* ./
-RUN npm install --omit=dev && npm rebuild better-sqlite3
+# Copy pre-built node_modules (includes compiled better-sqlite3 binary — no rebuild needed)
+COPY --from=builder /build/server/node_modules ./node_modules
 
-# Copy built artifacts from builder stage
+# Copy compiled server and static client files
 COPY --from=builder /build/server/dist ./dist
 
 # Copy entrypoint script
