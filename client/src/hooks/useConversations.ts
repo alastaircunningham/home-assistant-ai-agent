@@ -17,6 +17,15 @@ export function useConversations() {
     try {
       const data = await fetchConversations();
       setConversations(data);
+      if (data.length > 0) {
+        // Auto-select the most recent conversation
+        setActiveConversationId(data[0]!.id);
+      } else {
+        // No conversations yet — create one so the input is immediately usable
+        const conv = await apiCreateConversation('New conversation');
+        setConversations([conv]);
+        setActiveConversationId(conv.id);
+      }
     } catch (err) {
       console.error('Failed to load conversations:', err);
     } finally {
