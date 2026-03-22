@@ -37,6 +37,8 @@ function runMigrations(database: Database.Database): void {
       tool_name TEXT PRIMARY KEY,
       policy TEXT NOT NULL CHECK (policy IN ('always_confirm','auto_approve','auto_deny'))
     );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_seq ON messages(conversation_id, seq);
   `);
 
   // Insert default confirmation policies (ignore if already present)
