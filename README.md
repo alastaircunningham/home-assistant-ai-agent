@@ -10,7 +10,7 @@ A Home Assistant add-on that embeds a Claude-powered chat interface directly in 
 - **Streaming responses** — Claude's reply appears word by word as it's generated
 - **Tool transparency** — every HA API call is shown inline with its inputs and result
 - **Action confirmations** — sensitive operations (locks, alarms, config edits) require explicit approval with a countdown timer
-- **Config file editing** — Claude can read and write your YAML files with automatic `.bak` backups and YAML validation
+- **Config file editing** — Claude can read, write, and surgically edit your YAML files; for list-based files (automations, scripts, scenes) it adds, updates, or removes individual items without rewriting the whole file, with automatic `.bak` backups, YAML validation, and HA config reload
 - **Conversation history** — all chats are persisted in SQLite; pick up where you left off
 - **Per-tool policies** — set any tool to auto-approve, always-confirm, or auto-deny from the settings UI
 - **Mobile friendly** — responsive layout with slide-out sidebar, safe-area aware input
@@ -179,11 +179,14 @@ Sensitive actions pause and show a confirmation card:
 
 ### Editing config files
 
-The agent can read and write your YAML files:
+The agent can read and edit your YAML files:
 
 > *"Add an automation that turns on the porch light at sunset"*
+> *"Update the bins reminder automation to also check the garage door sensor"*
 
-Claude will use `config_editor` to write to `automations.yaml`. This **always** requires your confirmation. A `.bak` backup is created before every write.
+For list-based files (`automations.yaml`, `scripts.yaml`, `scenes.yaml`, etc.) Claude uses surgical item-level operations — it only needs to provide the single item block, not the whole file. After writing, the relevant HA domain (`automation`, `script`, `scene`, etc.) is reloaded automatically.
+
+Config edits **always** require your confirmation. A `.bak` backup is created before every write.
 
 ### Settings
 
@@ -233,6 +236,7 @@ Click the ⚙ gear icon to:
 **Config file writes fail**
 - Blocked files (secrets.yaml, .storage/, .cloud/, etc.) cannot be written — this is intentional
 - YAML validation errors will be shown in Claude's response
+- For large `automations.yaml` files, Claude uses `add_item`/`update_item` instead of rewriting the whole file — if you see a "content is required" error on an older install, rebuild the add-on to pick up the latest tool definitions
 
 ---
 
