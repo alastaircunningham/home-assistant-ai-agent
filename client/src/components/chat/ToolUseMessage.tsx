@@ -3,9 +3,10 @@ import type { Message } from '../../lib/types';
 
 interface ToolUseMessageProps {
   message: Message;
+  hasResult: boolean;
 }
 
-export default function ToolUseMessage({ message }: ToolUseMessageProps) {
+export default function ToolUseMessage({ message, hasResult }: ToolUseMessageProps) {
   const [expanded, setExpanded] = useState(false);
 
   let parsedInput: string | null = null;
@@ -28,7 +29,7 @@ export default function ToolUseMessage({ message }: ToolUseMessageProps) {
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm">
           <div className="flex items-center gap-2">
             <span className="font-medium text-amber-800">Tool: {message.tool_name}</span>
-            {!message.tool_result && (
+            {!hasResult && (
               <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-amber-700 rounded-full animate-spin" />
             )}
           </div>

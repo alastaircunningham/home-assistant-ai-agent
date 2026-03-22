@@ -25,6 +25,12 @@ export default function MessageList({
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Build a set of tool_use_ids that have a corresponding tool_result message.
+  // tool_result messages store the tool_use_id in the tool_name field.
+  const resolvedToolUseIds = new Set(
+    messages.filter((m) => m.role === 'tool_result' && m.tool_name).map((m) => m.tool_name!),
+  );
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent, confirmationRequest]);
@@ -59,7 +65,7 @@ export default function MessageList({
           case 'assistant':
             return <AssistantMessage key={msg.id} message={msg} />;
           case 'tool_use':
-            return <ToolUseMessage key={msg.id} message={msg} />;
+            return <ToolUseMessage key={msg.id} message={msg} hasResult={resolvedToolUseIds.has(msg.id)} />;
           case 'tool_result':
             return <ToolResultMessage key={msg.id} message={msg} />;
           default:

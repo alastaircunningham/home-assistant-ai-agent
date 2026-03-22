@@ -10,26 +10,38 @@ export function useChat(activeConversationId: string | null) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [confirmationRequest, setConfirmationRequest] = useState<ConfirmationRequest | null>(null);
   const [contextWarning, setContextWarning] = useState<'warning' | 'truncated' | null>(null);
-  const { subscribe, send } = useWebSocket();
+  const { subscribe, send, isConnected } = useWebSocket();
   const activeIdRef = useRef(activeConversationId);
+  // Monotonically-increasing counter so concurrent loadMessages calls don't
+  // overwrite newer results with stale data (race condition when two
+  // message_complete events fire back-to-back during a tool-use loop).
+  const loadRequestIdRef = useRef(0);
+  // Track whether we've ever connected so we can detect reconnects.
+  const hasConnectedRef = useRef(false);
 
   useEffect(() => {
     activeIdRef.current = activeConversationId;
   }, [activeConversationId]);
 
   const loadMessages = useCallback(async (conversationId: string) => {
+    const requestId = ++loadRequestIdRef.current;
     setLoading(true);
     setStreamingContent('');
     setIsStreaming(false);
     setConfirmationRequest(null);
     try {
       const data = await fetchConversation(conversationId);
+      // Ignore stale responses superseded by a newer loadMessages call.
+      if (requestId !== loadRequestIdRef.current) return;
       setMessages(data.messages);
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return;
       console.error('Failed to load messages:', err);
       setMessages([]);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -45,6 +57,18 @@ export function useChat(activeConversationId: string | null) {
       setContextWarning(null);
     }
   }, [activeConversationId, loadMessages]);
+
+  // Reload messages when the WebSocket reconnects after a disconnect.
+  // This recovers the UI if a disconnect happened mid-stream and caused
+  // message_complete / message_delta events to be lost.
+  useEffect(() => {
+    if (isConnected) {
+      if (hasConnectedRef.current && activeIdRef.current) {
+        loadMessages(activeIdRef.current);
+      }
+      hasConnectedRef.current = true;
+    }
+  }, [isConnected, loadMessages]);
 
   // Handle WebSocket messages via direct subscription to avoid React batching dropping deltas
   useEffect(() => {
@@ -93,6 +117,10 @@ export function useChat(activeConversationId: string | null) {
           console.error('WebSocket error:', msg.error);
           setIsStreaming(false);
           setStreamingContent('');
+          // Reload messages so whatever was saved to DB before the error is shown.
+          if (activeIdRef.current) {
+            loadMessages(activeIdRef.current);
+          }
           break;
         }
       }
