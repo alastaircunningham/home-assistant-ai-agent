@@ -140,7 +140,7 @@ The API key is stored AES-256-GCM encrypted. The encryption key lives at `/data/
 
 - [x] **Fix dropped streaming deltas (garbled chat text)** — `WebSocketContext` stores a single `lastMessage` state value that gets overwritten when React batches rapid `setLastMessage` calls during streaming. Intermediate `message_delta` chunks are silently lost, causing dropped characters and garbled text. Fix by replacing the single-value `lastMessage` pattern with a message queue (ref-backed array processed each render) or by accumulating streaming content directly in the `onmessage` handler via a ref, bypassing React state batching for high-frequency deltas.
 
-- [ ] **Add database indexes on messages table** — `messages` table has no index on `conversation_id`. Every `getMessages()` call and `getNextSeq()` `MAX(seq)` query is a full table scan. Add `CREATE INDEX IF NOT EXISTS idx_messages_conversation_seq ON messages(conversation_id, seq)` via a migration in `server/src/db/database.ts`.
+- [x] **Add database indexes on messages table** — `messages` table has no index on `conversation_id`. Every `getMessages()` call and `getNextSeq()` `MAX(seq)` query is a full table scan. Add `CREATE INDEX IF NOT EXISTS idx_messages_conversation_seq ON messages(conversation_id, seq)` via a migration in `server/src/db/database.ts`.
 
 - [ ] **Add timeout on Claude API calls** — `streamChat` in `claude.ts` awaits `stream.finalMessage()` with no timeout. If the Anthropic API hangs, the conversation loop blocks indefinitely. Wrap with `Promise.race()` and a reasonable timeout (e.g. 120s), and propagate a clear error to the client.
 
