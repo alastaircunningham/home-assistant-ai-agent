@@ -112,7 +112,7 @@ function getDefaultSystemPrompt(): string {
 
 // All current Claude models have a 200k token context window.
 const MODEL_CONTEXT_WINDOW = 200_000;
-const MAX_RESPONSE_TOKENS = 4_096;
+const MAX_RESPONSE_TOKENS = 8_192;
 // Reserve 80% of the window for input, minus the response budget.
 const CONTEXT_BUDGET = Math.floor(MODEL_CONTEXT_WINDOW * 0.8) - MAX_RESPONSE_TOKENS;
 // Warn when input tokens exceed 60% of the budget (before truncation kicks in).
@@ -224,7 +224,7 @@ export async function streamChat(
   try {
     const stream = client.messages.stream({
       model,
-      max_tokens: 4096,
+      max_tokens: MAX_RESPONSE_TOKENS,
       system: systemPrompt,
       messages: messages as Anthropic.MessageParam[],
       tools: tools as Anthropic.Tool[],
@@ -237,6 +237,17 @@ export async function streamChat(
 
     // Get the final message
     const finalMessage = await stream.finalMessage();
+
+    // If the response was cut off by the token limit, any tool_use blocks
+    // will have incomplete inputs (e.g. content field missing from a write
+    // call). Throw so the caller can surface a meaningful error rather than
+    // silently executing with a malformed tool call.
+    if (finalMessage.stop_reason === 'max_tokens') {
+      throw new Error(
+        'Response was truncated by the token limit. If you were writing a large file, ' +
+          'try breaking it into smaller sections or reducing the file size.',
+      );
+    }
 
     // Extract tool_use blocks from the response
     for (const block of finalMessage.content) {
