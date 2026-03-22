@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../logger.js';
-import { addMessage, getMessages, getNextSeq, type Message } from '../db/messages.repo.js';
+import { addMessage, getMessages, type Message } from '../db/messages.repo.js';
 import { getToolsForClaude } from '../tools/index.js';
 import {
   streamChat,
@@ -43,13 +43,21 @@ export function removePendingConfirmation(id: string): void {
   pendingConfirmations.delete(id);
 }
 
-function setPendingConfirmation(id: string, confirmation: PendingConfirmation): void {
+function setPendingConfirmation(
+  id: string,
+  confirmation: PendingConfirmation,
+  wsBroadcast: WsBroadcast,
+): void {
   pendingConfirmations.set(id, confirmation);
-  // Auto-expire after timeout to prevent memory leaks
+  // Auto-expire after timeout to prevent memory leaks, and notify the client
   setTimeout(() => {
     if (pendingConfirmations.has(id)) {
       logger.info(`Confirmation ${id} expired (${confirmation.toolName})`);
       pendingConfirmations.delete(id);
+      wsBroadcast('confirmation_expired', {
+        id,
+        conversation_id: confirmation.conversationId,
+      });
     }
   }, CONFIRMATION_TIMEOUT_MS);
 }
@@ -137,13 +145,11 @@ export async function handleMessage(
   toolContext: ToolContext,
 ): Promise<{ userMessageId: string }> {
   // Save user message
-  const userSeq = getNextSeq(conversationId);
   const userMsg = addMessage({
     id: uuidv4(),
     conversation_id: conversationId,
     role: 'user',
     content: userContent,
-    seq: userSeq,
   });
 
   // Load conversation history and convert to Claude format
@@ -214,13 +220,11 @@ async function runConversationLoop(
 
     // Save assistant text if any
     if (fullText) {
-      const assistantSeq = getNextSeq(conversationId);
       addMessage({
         id: uuidv4(),
         conversation_id: conversationId,
         role: 'assistant',
         content: fullText,
-        seq: assistantSeq,
       });
     }
 
@@ -232,14 +236,12 @@ async function runConversationLoop(
       // Save tool_use messages
       const toolUseBlocks: ClaudeContentBlock[] = [];
       for (const tu of toolUses) {
-        const tuSeq = getNextSeq(conversationId);
         addMessage({
           id: tu.id,
           conversation_id: conversationId,
           role: 'tool_use',
           tool_name: tu.name,
           tool_input: JSON.stringify(tu.input),
-          seq: tuSeq,
         });
         toolUseBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
       }
@@ -272,14 +274,12 @@ async function runConversationLoop(
           const result = await executeTool(tu.name, tu.input, toolContext);
           const resultStr = JSON.stringify(result);
 
-          const trSeq = getNextSeq(conversationId);
           addMessage({
             id: uuidv4(),
             conversation_id: conversationId,
             role: 'tool_result',
             tool_name: tu.id, // Store tool_use_id for mapping
             tool_result: resultStr,
-            seq: trSeq,
           });
 
           toolResultBlocks.push({
@@ -303,14 +303,12 @@ async function runConversationLoop(
             error: 'Tool execution was denied by policy',
           });
 
-          const trSeq = getNextSeq(conversationId);
           addMessage({
             id: uuidv4(),
             conversation_id: conversationId,
             role: 'tool_result',
             tool_name: tu.id,
             tool_result: deniedResult,
-            seq: trSeq,
           });
 
           toolResultBlocks.push({
@@ -332,13 +330,17 @@ async function runConversationLoop(
           hasPendingConfirmation = true;
           const confirmationId = uuidv4();
 
-          setPendingConfirmation(confirmationId, {
-            id: confirmationId,
-            conversationId,
-            toolUseId: tu.id,
-            toolName: tu.name,
-            toolInput: tu.input,
-          });
+          setPendingConfirmation(
+            confirmationId,
+            {
+              id: confirmationId,
+              conversationId,
+              toolUseId: tu.id,
+              toolName: tu.name,
+              toolInput: tu.input,
+            },
+            wsBroadcast,
+          );
 
           wsBroadcast('confirmation_required', {
             id: confirmationId,
@@ -415,14 +417,12 @@ export async function resumeAfterConfirmation(
   }
 
   // Save tool result to DB
-  const trSeq = getNextSeq(conversationId);
   addMessage({
     id: uuidv4(),
     conversation_id: conversationId,
     role: 'tool_result',
     tool_name: toolUseId,
     tool_result: resultStr,
-    seq: trSeq,
   });
 
   // Reload the full conversation from DB (tool_result was just saved above),

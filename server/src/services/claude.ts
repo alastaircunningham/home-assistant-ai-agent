@@ -240,8 +240,17 @@ export async function streamChat(
       callbacks.onText(text);
     });
 
-    // Get the final message
-    const finalMessage = await stream.finalMessage();
+    // Get the final message, with a hard timeout to prevent indefinite hangs
+    const STREAM_TIMEOUT_MS = 120_000;
+    const finalMessage = await Promise.race([
+      stream.finalMessage(),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Claude API request timed out after 120s')),
+          STREAM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
 
     // If the response was cut off by the token limit, any tool_use blocks
     // will have incomplete inputs (e.g. content field missing from a write

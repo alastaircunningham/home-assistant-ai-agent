@@ -142,13 +142,13 @@ The API key is stored AES-256-GCM encrypted. The encryption key lives at `/data/
 
 - [x] **Add database indexes on messages table** — `messages` table has no index on `conversation_id`. Every `getMessages()` call and `getNextSeq()` `MAX(seq)` query is a full table scan. Add `CREATE INDEX IF NOT EXISTS idx_messages_conversation_seq ON messages(conversation_id, seq)` via a migration in `server/src/db/database.ts`.
 
-- [ ] **Add timeout on Claude API calls** — `streamChat` in `claude.ts` awaits `stream.finalMessage()` with no timeout. If the Anthropic API hangs, the conversation loop blocks indefinitely. Wrap with `Promise.race()` and a reasonable timeout (e.g. 120s), and propagate a clear error to the client.
+- [x] **Add timeout on Claude API calls** — `streamChat` in `claude.ts` awaits `stream.finalMessage()` with no timeout. If the Anthropic API hangs, the conversation loop blocks indefinitely. Wrap with `Promise.race()` and a reasonable timeout (e.g. 120s), and propagate a clear error to the client.
 
-- [ ] **Fix race condition in `getNextSeq()`** — `messages.repo.ts` reads `MAX(seq)` and returns `+1` in two separate steps. Concurrent calls can read the same max and produce duplicate sequence numbers, corrupting message order. Make this atomic using a transaction or `INSERT...RETURNING`.
+- [x] **Fix race condition in `getNextSeq()`** — `messages.repo.ts` reads `MAX(seq)` and returns `+1` in two separate steps. Concurrent calls can read the same max and produce duplicate sequence numbers, corrupting message order. Make this atomic using a transaction or `INSERT...RETURNING`.
 
-- [ ] **Fix stale messages in `resumeAfterConfirmation`** — `PendingConfirmation` captures the full messages array at confirmation time. If the conversation progresses before the user responds, the resumed loop uses stale context. Re-fetch messages from the DB instead of using the captured array.
+- [x] **Fix stale messages in `resumeAfterConfirmation`** — `PendingConfirmation` captures the full messages array at confirmation time. If the conversation progresses before the user responds, the resumed loop uses stale context. Re-fetch messages from the DB instead of using the captured array.
 
-- [ ] **Handle confirmation timeout expiry on client** — When the 30s confirmation timeout fires, the entry is deleted from the `pendingConfirmations` map but the client is never notified. If the user then approves, `resumeAfterConfirmation` silently no-ops. Broadcast a `confirmation_expired` event to the client so the UI can clear the prompt and show a message.
+- [x] **Handle confirmation timeout expiry on client** — When the 30s confirmation timeout fires, the entry is deleted from the `pendingConfirmations` map but the client is never notified. If the user then approves, `resumeAfterConfirmation` silently no-ops. Broadcast a `confirmation_expired` event to the client so the UI can clear the prompt and show a message.
 
 ## Common gotchas
 

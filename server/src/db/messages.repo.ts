@@ -27,29 +27,27 @@ export function addMessage(msg: {
   tool_name?: string | null;
   tool_input?: string | null;
   tool_result?: string | null;
-  seq: number;
 }): Message {
   const db = getDb();
-  db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, tool_name, tool_input, tool_result, seq)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    msg.id,
-    msg.conversation_id,
-    msg.role,
-    msg.content ?? null,
-    msg.tool_name ?? null,
-    msg.tool_input ?? null,
-    msg.tool_result ?? null,
-    msg.seq,
-  );
-  return db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id) as Message;
-}
-
-export function getNextSeq(conversationId: string): number {
-  const db = getDb();
-  const row = db
-    .prepare('SELECT COALESCE(MAX(seq), 0) AS max_seq FROM messages WHERE conversation_id = ?')
-    .get(conversationId) as { max_seq: number };
-  return row.max_seq + 1;
+  const insert = db.transaction(() => {
+    const row = db
+      .prepare('SELECT COALESCE(MAX(seq), 0) AS max_seq FROM messages WHERE conversation_id = ?')
+      .get(msg.conversation_id) as { max_seq: number };
+    const seq = row.max_seq + 1;
+    db.prepare(
+      `INSERT INTO messages (id, conversation_id, role, content, tool_name, tool_input, tool_result, seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      msg.id,
+      msg.conversation_id,
+      msg.role,
+      msg.content ?? null,
+      msg.tool_name ?? null,
+      msg.tool_input ?? null,
+      msg.tool_result ?? null,
+      seq,
+    );
+    return db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id) as Message;
+  });
+  return insert();
 }

@@ -103,6 +103,10 @@ export function useChat(activeConversationId: string | null) {
           });
           break;
         }
+        case 'confirmation_expired': {
+          setConfirmationRequest((prev) => (prev?.id === msg.id ? null : prev));
+          break;
+        }
         case 'context_truncated': {
           setContextWarning('truncated');
           break;
