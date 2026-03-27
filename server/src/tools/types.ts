@@ -38,4 +38,5 @@ export interface HassClient {
   activateScene(entityId: string): Promise<any>;
   getAddons(): Promise<any[]>;
   callApi(method: string, path: string, data?: any): Promise<any>;
+  getConfig(): Promise<any>;
 }

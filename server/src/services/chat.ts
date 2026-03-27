@@ -12,7 +12,7 @@ import {
   type ClaudeContentBlock,
 } from './claude.js';
 import { executeTool, checkConfirmation } from './tool-executor.js';
-import type { ToolContext } from '../tools/types.js';
+import type { ToolContext, HassClient } from '../tools/types.js';
 
 function safeJsonParse(value: string | null | undefined): Record<string, unknown> {
   if (!value) return {};
@@ -24,6 +24,35 @@ function safeJsonParse(value: string | null | undefined): Record<string, unknown
 }
 
 const MAX_TOOL_RESULT_TOKENS = 30_000;
+
+async function buildDatetimeContext(hassClient: HassClient): Promise<string> {
+  try {
+    const config = await hassClient.getConfig();
+    const tz: string = config?.time_zone ?? 'UTC';
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', {
+      timeZone: tz,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    const timeStr = now.toLocaleTimeString('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const offsetParts = new Intl.DateTimeFormat('en', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+    }).formatToParts(now);
+    const offsetStr = offsetParts.find((p) => p.type === 'timeZoneName')?.value ?? 'UTC';
+    return `## Current date and time\nToday is ${dateStr}. The current local time is ${timeStr} (${tz}, ${offsetStr}). Always present times and dates to the user in this timezone unless they ask otherwise.`;
+  } catch {
+    const now = new Date();
+    return `## Current date and time\nThe current UTC date and time is ${now.toISOString()}. The user's local timezone could not be determined.`;
+  }
+}
 
 function capToolResult(resultStr: string): string {
   const estimatedTokens = Math.ceil(resultStr.length / 4);
@@ -187,6 +216,7 @@ async function runConversationLoop(
 ): Promise<void> {
   let currentMessages = [...messages];
   let continueLoop = true;
+  const datetimeContext = await buildDatetimeContext(toolContext.hassClient);
 
   while (continueLoop) {
     continueLoop = false;
@@ -209,21 +239,26 @@ async function runConversationLoop(
     }
 
     // Stream from Claude
-    const response = await streamChat(messagesForApi, tools, {
-      onText: (text) => {
-        fullText += text;
-        wsBroadcast('message_delta', { conversation_id: conversationId, content: text });
+    const response = await streamChat(
+      messagesForApi,
+      tools,
+      {
+        onText: (text) => {
+          fullText += text;
+          wsBroadcast('message_delta', { conversation_id: conversationId, content: text });
+        },
+        onToolUse: (toolUse) => {
+          toolUses.push(toolUse);
+        },
+        onComplete: () => {
+          // Will be handled below
+        },
+        onError: (error) => {
+          wsBroadcast('error', { conversationId, error: error.message });
+        },
       },
-      onToolUse: (toolUse) => {
-        toolUses.push(toolUse);
-      },
-      onComplete: () => {
-        // Will be handled below
-      },
-      onError: (error) => {
-        wsBroadcast('error', { conversationId, error: error.message });
-      },
-    });
+      datetimeContext,
+    );
 
     // Save assistant text if any
     if (fullText) {

@@ -164,6 +164,10 @@ export function createHassClient(): HassClient {
       const url = path.startsWith('http') ? path : `${baseUrl}${path}`;
       return request(method, url, data);
     },
+
+    async getConfig(): Promise<any> {
+      return request('GET', `${baseUrl}/config`);
+    },
   };
 
   return client;
