@@ -9,6 +9,7 @@ const inputSchema = z.object({
     .optional()
     .describe('Filter by domain (e.g. light, switch, climate, sensor)'),
   area: z.string().optional().describe('Filter by area name'),
+  limit: z.number().optional().describe('Maximum number of results to return (default 100)'),
 });
 
 const listDevices: ToolDefinition = {
@@ -21,7 +22,8 @@ const listDevices: ToolDefinition = {
 
   async execute(input: z.infer<typeof inputSchema>, context: ToolContext): Promise<ToolResult> {
     try {
-      const { query, domain } = input;
+      const { query, domain, limit } = input;
+      const maxResults = limit ?? 100;
       let states = await context.hassClient.getStates();
 
       if (domain) {
@@ -37,16 +39,24 @@ const listDevices: ToolDefinition = {
         });
       }
 
-      const results = states.map((s: any) => ({
+      const allResults = states.map((s: any) => ({
         entity_id: s.entity_id,
         state: s.state,
         friendly_name: s.attributes?.friendly_name ?? null,
         domain: (s.entity_id as string).split('.')[0],
       }));
 
+      const totalCount = allResults.length;
+      const results = allResults.slice(0, maxResults);
+
       return {
         success: true,
-        result: { count: results.length, entities: results },
+        result: {
+          count: results.length,
+          total_count: totalCount,
+          truncated: totalCount > maxResults,
+          entities: results,
+        },
       };
     } catch (err) {
       return {

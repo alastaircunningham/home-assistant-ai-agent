@@ -49,10 +49,10 @@ export function getModel(): string {
  * Build the system prompt for the Home Assistant AI agent.
  * Uses a DB override if one has been saved, otherwise returns the hardcoded default.
  */
-export function buildSystemPrompt(): string {
-  const override = getSetting('system_prompt');
-  if (override) return override;
-  return getDefaultSystemPrompt();
+export function buildSystemPrompt(datetimeContext?: string): string {
+  const base = getSetting('system_prompt') ?? getDefaultSystemPrompt();
+  if (!datetimeContext) return base;
+  return `${base}\n\n${datetimeContext}`;
 }
 
 function getDefaultSystemPrompt(): string {
@@ -215,10 +215,11 @@ export async function streamChat(
   messages: ClaudeMessage[],
   tools: ClaudeTool[],
   callbacks: StreamCallbacks,
+  datetimeContext?: string,
 ): Promise<Anthropic.Message> {
   const client = createClient();
   const model = getModel();
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(datetimeContext);
 
   logger.debug('Starting Claude stream', {
     model,
