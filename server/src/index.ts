@@ -7,13 +7,14 @@ import cors from 'cors';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { initDatabase } from './db/database.js';
+import { ensureSingletonConversation } from './db/conversations.repo.js';
+import { startAgingScheduler } from './services/aging.js';
 import { ingressMiddleware, ingressRouter } from './middleware/ingress.js';
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createWebSocketServer } from './websocket/server.js';
 
 import healthRouter from './routes/health.js';
-import conversationsRouter from './routes/conversations.js';
 import chatRouter from './routes/chat.js';
 import settingsRouter from './routes/settings.js';
 import confirmationsRouter from './routes/confirmations.js';
@@ -30,6 +31,8 @@ const __dirname = path.dirname(__filename);
 // Initialise database
 // ---------------------------------------------------------------------------
 initDatabase();
+ensureSingletonConversation();
+startAgingScheduler();
 
 // ---------------------------------------------------------------------------
 // Express app
@@ -47,7 +50,6 @@ app.use(express.static(publicDir));
 
 // API routes
 app.use('/api/health', healthRouter);
-app.use('/api/conversations', conversationsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/confirmation-policies', confirmationsRouter);

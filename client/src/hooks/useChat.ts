@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message, ConfirmationRequest } from '../lib/types';
-import { fetchConversation, sendMessage as apiSendMessage } from '../lib/api';
+import { fetchMessages, sendMessage as apiSendMessage } from '../lib/api';
 import { useWebSocket } from '../context/WebSocketContext';
 
-export function useChat(activeConversationId: string | null) {
+export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -11,7 +11,6 @@ export function useChat(activeConversationId: string | null) {
   const [confirmationRequest, setConfirmationRequest] = useState<ConfirmationRequest | null>(null);
   const [contextWarning, setContextWarning] = useState<'warning' | 'truncated' | null>(null);
   const { subscribe, send, isConnected } = useWebSocket();
-  const activeIdRef = useRef(activeConversationId);
   // Monotonically-increasing counter so concurrent loadMessages calls don't
   // overwrite newer results with stale data (race condition when two
   // message_complete events fire back-to-back during a tool-use loop).
@@ -19,21 +18,17 @@ export function useChat(activeConversationId: string | null) {
   // Track whether we've ever connected so we can detect reconnects.
   const hasConnectedRef = useRef(false);
 
-  useEffect(() => {
-    activeIdRef.current = activeConversationId;
-  }, [activeConversationId]);
-
-  const loadMessages = useCallback(async (conversationId: string) => {
+  const loadMessages = useCallback(async () => {
     const requestId = ++loadRequestIdRef.current;
     setLoading(true);
     setStreamingContent('');
     setIsStreaming(false);
     setConfirmationRequest(null);
     try {
-      const data = await fetchConversation(conversationId);
+      const data = await fetchMessages();
       // Ignore stale responses superseded by a newer loadMessages call.
       if (requestId !== loadRequestIdRef.current) return;
-      setMessages(data.messages);
+      setMessages(data);
     } catch (err) {
       if (requestId !== loadRequestIdRef.current) return;
       console.error('Failed to load messages:', err);
@@ -46,25 +41,16 @@ export function useChat(activeConversationId: string | null) {
   }, []);
 
   useEffect(() => {
-    if (activeConversationId) {
-      loadMessages(activeConversationId);
-      setContextWarning(null);
-    } else {
-      setMessages([]);
-      setStreamingContent('');
-      setIsStreaming(false);
-      setConfirmationRequest(null);
-      setContextWarning(null);
-    }
-  }, [activeConversationId, loadMessages]);
+    loadMessages();
+  }, [loadMessages]);
 
   // Reload messages when the WebSocket reconnects after a disconnect.
   // This recovers the UI if a disconnect happened mid-stream and caused
   // message_complete / message_delta events to be lost.
   useEffect(() => {
     if (isConnected) {
-      if (hasConnectedRef.current && activeIdRef.current) {
-        loadMessages(activeIdRef.current);
+      if (hasConnectedRef.current) {
+        loadMessages();
       }
       hasConnectedRef.current = true;
     }
@@ -75,10 +61,6 @@ export function useChat(activeConversationId: string | null) {
     return subscribe((msg) => {
       const { type } = msg;
 
-      if (msg.conversation_id && msg.conversation_id !== activeIdRef.current) {
-        return;
-      }
-
       switch (type) {
         case 'message_delta': {
           setIsStreaming(true);
@@ -88,9 +70,7 @@ export function useChat(activeConversationId: string | null) {
         case 'message_complete': {
           setIsStreaming(false);
           setStreamingContent('');
-          if (activeIdRef.current) {
-            loadMessages(activeIdRef.current);
-          }
+          loadMessages();
           break;
         }
         case 'confirmation_required': {
@@ -118,9 +98,7 @@ export function useChat(activeConversationId: string | null) {
           setIsStreaming(false);
           setStreamingContent('');
           // Reload messages so whatever was saved to DB before the error is shown.
-          if (activeIdRef.current) {
-            loadMessages(activeIdRef.current);
-          }
+          loadMessages();
           break;
         }
       }
@@ -129,11 +107,9 @@ export function useChat(activeConversationId: string | null) {
 
   const sendMessageToConversation = useCallback(
     async (content: string) => {
-      if (!activeConversationId) return;
-
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
-        conversation_id: activeConversationId,
+        conversation_id: 'default',
         role: 'user',
         content,
         tool_name: null,
@@ -145,12 +121,12 @@ export function useChat(activeConversationId: string | null) {
       setMessages((prev) => [...prev, tempMessage]);
 
       try {
-        await apiSendMessage(activeConversationId, content);
+        await apiSendMessage(content);
       } catch (err) {
         console.error('Failed to send message:', err);
       }
     },
-    [activeConversationId, messages.length],
+    [messages.length],
   );
 
   const respondToConfirmation = useCallback(

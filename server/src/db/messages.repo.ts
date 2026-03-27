@@ -53,3 +53,13 @@ export function getNextSeq(conversationId: string): number {
     .get(conversationId) as { max_seq: number };
   return row.max_seq + 1;
 }
+
+export function deleteOldMessages(conversationId: string, olderThanDays: number): number {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `DELETE FROM messages WHERE conversation_id = ? AND created_at < datetime('now', '-' || ? || ' days')`,
+    )
+    .run(conversationId, olderThanDays);
+  return result.changes;
+}

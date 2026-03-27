@@ -3,7 +3,7 @@ import { logger } from '../logger.js';
 import type { WsMessage } from './server.js';
 import { sendToAll } from './server.js';
 import { handleMessage, resumeAfterConfirmation } from '../services/chat.js';
-import { getConversation } from '../db/conversations.repo.js';
+import { SINGLETON_ID } from '../db/conversations.repo.js';
 import { getToolContext } from '../tool-context.js';
 
 /**
@@ -15,7 +15,7 @@ export function handleWebSocketMessage(ws: WebSocket, message: WsMessage): void 
 
   switch (type) {
     case 'send_message':
-      handleSendMessage(ws, data as { conversationId: string; content: string });
+      handleSendMessage(ws, data as { content: string });
       break;
 
     case 'confirmation_response':
@@ -35,28 +35,14 @@ export function handleWebSocketMessage(ws: WebSocket, message: WsMessage): void 
 /**
  * Handle a send_message WebSocket request.
  */
-function handleSendMessage(
-  ws: WebSocket,
-  data: { conversationId: string; content: string },
-): void {
-  const { conversationId, content } = data ?? {};
+function handleSendMessage(ws: WebSocket, data: { content: string }): void {
+  const { content } = data ?? {};
 
-  if (!conversationId || !content) {
+  if (!content) {
     ws.send(
       JSON.stringify({
         type: 'error',
-        data: { message: 'conversationId and content are required' },
-      }),
-    );
-    return;
-  }
-
-  const conversation = getConversation(conversationId);
-  if (!conversation) {
-    ws.send(
-      JSON.stringify({
-        type: 'error',
-        data: { message: 'Conversation not found' },
+        data: { message: 'content is required' },
       }),
     );
     return;
@@ -64,15 +50,12 @@ function handleSendMessage(
 
   const toolContext = getToolContext();
 
-  handleMessage(conversationId, content, sendToAll, toolContext).catch((err) => {
-    logger.error('Failed to handle WebSocket message', {
-      error: (err as Error).message,
-      conversationId,
-    });
+  handleMessage(SINGLETON_ID, content, sendToAll, toolContext).catch((err) => {
+    logger.error('Failed to handle WebSocket message', { error: (err as Error).message });
     ws.send(
       JSON.stringify({
         type: 'error',
-        data: { conversationId, message: (err as Error).message },
+        data: { message: (err as Error).message },
       }),
     );
   });
