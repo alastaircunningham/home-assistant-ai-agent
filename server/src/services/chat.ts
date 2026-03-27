@@ -23,6 +23,19 @@ function safeJsonParse(value: string | null | undefined): Record<string, unknown
   }
 }
 
+const MAX_TOOL_RESULT_TOKENS = 30_000;
+
+function capToolResult(resultStr: string): string {
+  const estimatedTokens = Math.ceil(resultStr.length / 4);
+  if (estimatedTokens <= MAX_TOOL_RESULT_TOKENS) return resultStr;
+  const maxChars = MAX_TOOL_RESULT_TOKENS * 4;
+  logger.warn(`Tool result too large (~${estimatedTokens} tokens), truncating to ~${MAX_TOOL_RESULT_TOKENS} tokens`);
+  return (
+    resultStr.slice(0, maxChars) +
+    `\n[Result truncated from ~${estimatedTokens} to ~${MAX_TOOL_RESULT_TOKENS} tokens. Use more specific parameters to get a smaller result.]`
+  );
+}
+
 export interface PendingConfirmation {
   id: string;
   conversationId: string;
@@ -270,7 +283,7 @@ async function runConversationLoop(
 
         if (policy === 'auto_approve') {
           const result = await executeTool(tu.name, tu.input, toolContext);
-          const resultStr = JSON.stringify(result);
+          const resultStr = capToolResult(JSON.stringify(result));
 
           const trSeq = getNextSeq(conversationId);
           addMessage({
@@ -387,7 +400,7 @@ export async function resumeAfterConfirmation(
 
   if (approved) {
     const result = await executeTool(toolName, toolInput, toolContext);
-    resultStr = JSON.stringify(result);
+    resultStr = capToolResult(JSON.stringify(result));
 
     wsBroadcast('tool_result', {
       conversation_id: conversationId,
