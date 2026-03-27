@@ -1,24 +1,12 @@
 import { useState } from 'react';
 import { IngressProvider } from './context/IngressContext';
 import { WebSocketProvider } from './context/WebSocketContext';
-import { useConversations } from './hooks/useConversations';
 import { useChat } from './hooks/useChat';
 import { useSettings } from './hooks/useSettings';
 import ChatLayout from './components/layout/ChatLayout';
 import SettingsModal from './components/settings/SettingsModal';
 
 function AppInner() {
-  const {
-    conversations,
-    activeConversationId,
-    activeConversation,
-    loading: conversationsLoading,
-    selectConversation,
-    createConversation,
-    deleteConversation,
-    renameConversation,
-  } = useConversations();
-
   const {
     messages,
     loading: messagesLoading,
@@ -28,7 +16,7 @@ function AppInner() {
     contextWarning,
     sendMessage,
     respondToConfirmation,
-  } = useChat(activeConversationId);
+  } = useChat();
 
   const {
     settings,
@@ -43,20 +31,12 @@ function AppInner() {
   return (
     <>
       <ChatLayout
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        activeConversation={activeConversation}
         messages={messages}
         streamingContent={streamingContent}
         isStreaming={isStreaming}
         confirmationRequest={confirmationRequest}
         contextWarning={contextWarning}
-        conversationsLoading={conversationsLoading}
         messagesLoading={messagesLoading}
-        onSelectConversation={selectConversation}
-        onCreateConversation={createConversation}
-        onDeleteConversation={deleteConversation}
-        onRenameConversation={renameConversation}
         onSendMessage={sendMessage}
         onRespondToConfirmation={respondToConfirmation}
         onOpenSettings={() => setSettingsOpen(true)}
